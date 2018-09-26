@@ -1,0 +1,327 @@
+---
+title: "Lending Club data analysis"
+output: html_notebook
+---
+
+Variables of interest (response variable)
+
+subgrade:  
+int_rate: interest rate 
+loan_status : default or not 
+
+
+```{r,include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(mice)
+library(corrplot)
+library(tabplot)
+library(lattice)
+library(corrplot)
+library(zoo)
+library(car)
+
+
+```
+
+
+```{r,include=FALSE}
+# read data 
+loan = read.csv("data/loan.csv",stringsAsFactors = FALSE)
+
+# number of unique observation
+length(unique(loan$id))
+length(unique(loan$member_id))
+# number of observation
+
+nrow(loan)
+
+# check the mising
+length(which(is.na(loan$annual_inc)))
+
+# check how many NAs in each feature
+num.NA <- sort(sapply(loan, function(x) {sum(is.na(x))}), 
+               decreasing=TRUE)
+
+
+# The percentage of data missing in train.
+# https://www.r-bloggers.com/r-tutorial-on-the-apply-family-of-functions/
+sum(is.na(loan)) / (nrow(loan) *ncol(loan))
+
+# Find out variables with largest number of missing values
+
+# How to treat missing values
+# (1) Remove features with too many missing value, 
+#     or remove all rows with NA if you have a lot of data
+# (2) If not missing at random, add new level to represent NA, impute with 0,
+#     or generate new feature.
+# (3) If missing at random, imputation using summary stats like mean or median,
+#     or modeling way.
+#     Example: use library(mice)
+#     https://www.r-bloggers.com/imputing-missing-data-with-r-mice-package/
+
+remain.col <- names(num.NA)[which(num.NA <= 0.8 * dim(loan)[1])]
+loan <- loan[, remain.col]
+loan$annual_inc[which(is.na(loan$annual_inc))] <- median(loan$annual_inc, na.rm = T)
+
+# How do we explore data?
+# 1) Numeric variables
+# 2) Categorical variables
+# 3) Numeric feature with numerical response
+# 4) Categorical feature with numerical response
+# 5) Numeric feature with categorical response
+# 6) Categorical feature with categorical response
+
+# 1) Numeric variables including both feature and response
+# interest rate 
+mean(loan$int_rate)
+sd(loan$int_rate)
+median(loan$int_rate)
+quantile(loan$int_rate, c(0.1, 0.25, 0.5, 0.75, 0.9))
+plot(density(loan$int_rate))
+# Q1 - 1.5IQR, Q1, median, Q3, Q3 + 1.5IQR, where IQR is interquartile range: Q3 - Q1
+boxplot(loan$int_rate)
+boxplot(int_rate ~ grade, data = loan)
+
+
+# Income 
+mean(loan$annual_inc)
+sd(loan$annual_inc)
+median(loan$annual_inc)
+quantile(loan$annual_inc, c(0.1, 0.25, 0.5, 0.75, 0.9))
+plot(density(loan$annual_inc))  # log normal distritbuion , use log to make it like normal
+plot(density(log(loan$annual_inc)))
+# Q1 - 1.5IQR, Q1, median, Q3, Q3 + 1.5IQR, where IQR is interquartile range: Q3 - Q1
+boxplot(log(loan$annual_inc + 1))
+
+# 2) Categorical variables
+sort(table(loan$loan_status))
+round(sort(table(loan$loan_status)) / dim(loan)[1] * 100, 2)
+barplot(sort(table(loan$loan_status), decreasing = TRUE))
+# remove certain string from loan_status
+loan$loan_status <- gsub('Does not meet the credit policy. Status:',
+                         '', loan$loan_status)
+sort(table(loan$loan_status))
+loan$loan_status_1 <- with(loan, ifelse(loan_status %in% c('Current', 'Fully Paid', 'Issued'),
+                                        1, 0))
+table(loan$loan_status_1)
+
+sort(table(loan$purpose))
+round(sort(table(loan$purpose)) / dim(loan)[1] * 100, 2)
+barplot(sort(table(loan$purpose), decreasing = TRUE))
+
+# 3) Numeric variable with numerical response, interest rate
+with(loan[1:10000, ], plot(log(annual_inc + 1), int_rate))
+correlations <- cor(loan[, c('int_rate', 'total_acc', 'acc_now_delinq', 'annual_inc',
+                             'dti', 'loan_amnt')]) 
+# possible to see NA if features has missing value
+correlations <- cor(loan[, c('int_rate', 'total_acc', 'acc_now_delinq', 'annual_inc',
+                             'dti', 'loan_amnt')], 
+                    use = "pairwise.complete.obs")
+corrplot(correlations, method = "number", tl.cex = 1, type = 'lower')
+# http://www.sthda.com/english/wiki/visualize-correlation-matrix-using-correlogram
+
+# 4) Categorical variable with numerical response
+boxplot(subset(loan, term == ' 36 months')$int_rate,
+        subset(loan, term == ' 60 months')$int_rate)
+boxplot(int_rate ~ purpose, data = loan)
+
+library(dplyr)
+loan %>% group_by(purpose) %>% summarise(int_by_purpose=mean(int_rate))
+
+head(loan$issue_d)
+
+# How to solve R problems, e.g, search Google for date MMM YYYY format in R: Date formatting MMM-YYYY - Stack Overflow
+as.Date(as.yearmon(loan$issue_d[1:5], "%b-%Y"))
+loan$issue_d_1 <- as.Date(as.yearmon(loan$issue_d, "%b-%Y"))
+loan$issue_year <- format(loan$issue_d_1, '%Y')
+loan$issue_mon <- format(loan$issue_d_1, '%m')
+int.rate.by.time <- by(loan, loan$issue_d_1, function(x) {
+  return(median(x$int_rate))
+})
+plot(as.Date(names(int.rate.by.time)), int.rate.by.time, type = 'l')
+
+int.rate.by.year <- by(loan, loan$issue_year, function(x) {
+  return(median(x$int_rate))
+})
+plot(names(int.rate.by.year), int.rate.by.year, type = 'l')
+
+# Not only see the median by time, but also distribution by time.
+car_loan = loan[loan$purpose=="credit_card",]
+
+bwplot(int_rate ~ issue_year , data = car_loan)
+bwplot(int_rate ~ purpose , data = loan)
+
+# 5) Numeric variable with categorical response
+boxplot(log(subset(loan, loan_status_1 == 0)$annual_inc + 1),
+        log(subset(loan, loan_status_1 == 1)$annual_inc + 1))
+with(subset(loan, loan_status_1 == 1), plot(density(log(1 + annual_inc))))
+with(subset(loan, loan_status_1 == 0), lines(density(log(1 + annual_inc)), col = 'red'))
+
+# 6) Categorical variable with categorical response
+table(loan$loan_status_1, loan$purpose)
+table(loan$loan_status_1, loan$purpose) / as.numeric(table(loan$loan_status_1))
+barplot(table(loan$loan_status_1, loan$purpose))
+barplot(table(loan$loan_status, loan$purpose), col = c(1:14))
+
+tableplot(loan, select = c('int_rate', 'acc_now_delinq', 'annual_inc',
+                           'loan_amnt', 'term', 'purpose'))
+tableplot(loan, select = c('loan_status_1', 'acc_now_delinq', 'annual_inc',
+                           'loan_amnt', 'term'))
+ 
+#org.data <- read.csv("LCFromWebsite_2007_2011.csv", stringsAsFactors = FALSE) #
+#org.data <- read.table("LCFromWebsite_2007_2011.csv", stringsAsFactors = FALSE, 
+                       fill = TRUE, sep = ",", skip = 1, header = T)
+
+
+```
+if not missing at random 
+add a feature to test if it is correlated with wealth/ 
+
+
+Using lending club dataset, examine relationship between each feature and response (interest rate). Pick 5 categorical and 5 numeric features, which you think are the most predictive with reasoning.
+
+summary, str, dim, head, tail, colnames, nrow, ncol
+
+
+```{r}
+set.seed(19)
+rnorm(10)
+dnorm(0)
+```
+
+
+```{r}
+# split data into train and test for model performance
+# 3. Then think about if we need process existing features.
+#loan$verification_status <- ifelse(loan$verification_status_joint != "",
+#                                   loan$verification_status_joint, loan$verification_status)
+
+summary(loan$dti_joint)
+# with(subset(loan, is.na(dti_joint)), table(application_type))
+# #loan$dti <- ifelse(!is.na(loan$dti_joint), loan$dti_joint, loan$dti)
+#oan$annual_inc <- ifelse(!is.na(loan$annual_inc_joint), loan$annual_inc_joint, loan$annual_inc)
+loan$home_ownership <- ifelse(loan$home_ownership %in% c('ANY', 'NONE', 'OTHER'), 'OTHER',
+                              loan$home_ownership)
+int_state <- by(loan, loan$addr_state, function(x) {
+  return(mean(x$int_rate))
+})
+loan$state_mean_int <-
+  ifelse(loan$addr_state %in% names(int_state)[which(int_state <= quantile(int_state, 0.25))], 
+         'low', ifelse(loan$addr_state %in% names(int_state)[which(int_state <= quantile(int_state, 0.5))],
+                       'lowmedium', ifelse(loan$addr_state %in% names(int_state)[which(int_state <= quantile(int_state, 0.75))], 
+                                           'mediumhigh', 'high')))
+
+num.NA <- sort(sapply(loan, function(x) { sum(is.na(x))} ), decreasing = TRUE)
+remain.col <- names(num.NA)[which(num.NA <= 0.8 * dim(loan)[1])]
+loan <- loan[, remain.col]
+
+
+set.seed(1)
+train.ind <- sample(1:dim(loan)[1], 0.7 * dim(loan)[1])
+train <- loan[train.ind, ]
+test <- loan[-train.ind, ]
+
+mod1 <- lm(int_rate ~ addr_state + home_ownership + annual_inc + dti +
+             + term + loan_amnt + total_acc + tot_cur_bal + open_acc,
+           data = train)
+summary(mod1)
+
+mod2 <- lm(int_rate ~ state_mean_int + home_ownership + annual_inc + dti +
+             + term + loan_amnt + total_acc + tot_cur_bal + open_acc,
+           data = train)
+summary(mod2)
+
+train.sub <- train[, c('int_rate', 'state_mean_int', 'home_ownership', 'annual_inc', 'dti',
+                       'term', 'loan_amnt', 'total_acc', 'tot_cur_bal', 'open_acc',"purpose","pub_rec")]
+dim(train.sub)
+num.NA <- sort(sapply(train.sub, function(x) { sum(is.na(x))} ), decreasing = TRUE)
+train.sub$tot_cur_bal[which(is.na(train.sub$tot_cur_bal))] <- median(train.sub$tot_cur_bal, na.rm = T)
+train.sub$total_acc[which(is.na(train.sub$total_acc))] <- median(train.sub$total_acc, na.rm = T)
+train.sub$open_acc[which(is.na(train.sub$open_acc))] <- median(train.sub$open_acc, na.rm = T)
+train.sub$annual_inc[which(is.na(train.sub$annual_inc))] <- median(train.sub$annual_inc, na.rm = T)
+mod2 <- lm(int_rate ~ ., data = train.sub)
+summary(mod2)
+# If seeing NA in coefficient, it means almost perfect correlation between features
+alias(mod1)
+
+# See extremely small estimate, e.g., loan_amnt, because of the magnitude, to compare the relative importance of features
+# Standardize
+train.sub.scale <- train.sub
+train.sub.scale[, c(4,5,7,8,9,10)] <- scale(train.sub.scale[, c(4,5,7,8,9,10)])
+
+mod3 <- lm(int_rate ~ ., data = as.data.frame(train.sub.scale))
+# standardizing won't change the significant of features, but the estimate will change.
+
+# Rows with any NA will be removed.
+train.sub.matrix <- model.matrix( ~., train.sub)
+head(train.sub.matrix)
+
+x <- train.sub.matrix[, -2]
+y <- train.sub.matrix[, 2]
+# to calculate the XT*X
+t(x) %*% x
+# If there is error, due to only taking matrix as argument
+# x <- as.matrix(x)
+
+# note that X dim is n * (p+1), XT*X dim is (p+1) * (p+1)
+# inverse
+xtxi <- solve(t(x) %*% x)
+# beta estimator
+xtxi %*% t(x) %*% y
+# compare with model fitted coefficient
+coef(mod2)
+
+# sigma estimator, there are 13 features in total, plus beta0
+head(mod2$res)
+sqrt(sum(mod2$res^2)/(dim(train.sub)[1] - 14)) 
+
+# R square: 1 - sum_square_residual / sum_square_total
+1 - sum(mod2$res^2)/sum((y-mean(y))^2)
+# adjusted R square
+1 - (sum(mod2$res^2)/sum((y-mean(y))^2)) * 
+  (dim(train.sub)[1] - 1) /(dim(train.sub)[1] - 13 - 1)
+# small p, R square adjusted is very similar to R square.
+
+# F test score, go to slides.
+sst = sum((y - mean(y))^2) # sum of square total, df = n - 1 = 572060
+ssr = sum(mod2$res^2) #  sum of square residual, df = n-1-p = 572047
+ssm = sum((y - mean(y))^2) - sum(mod2$res^2) # sum of square model, df = 13
+Fstats = (ssm)/(13) / (ssr / (dim(train.sub)[1] - 13 -1))
+1 - pf(Fstats, 13, (dim(train.sub)[1] - 13 - 1)) # def = p and n-1-p
+
+# residual = observed - fitted
+head(sort(mod2$res))
+mod2$res[which.min(mod2$res)]
+mod2$res[which.max(mod2$res)]
+plot(mod2$fit, mod2$res, xlab = 'Fitted', ylab = 'residual')
+
+# See data points with negative fitted value, we should not predict negative interest rate
+mod2_1 <- lm(log(int_rate) ~ state_mean_int + home_ownership + annual_inc + dti +
+               + term + loan_amnt + total_acc + tot_cur_bal + open_acc,
+             data = train.sub)
+# fitted or predicted interest rate
+summary(exp(mod2_1$fitted.values))
+summary(mod2_1$residuals)
+plot(mod2_1$fit, mod2_1$res, xlab = 'Fitted', ylab = 'residual')
+
+# still large residuals for some data points. Check the reason.
+cbind(train.sub[which(mod2_1$fitted <= 1.5), ],
+      pred = round(exp(predict(mod2_1, train.sub[which(mod2_1$fitted <= 1.5), ])), 2))
+
+
+train.sub$annual_inc[train.sub$annual_inc==0]=0.001
+
+mod2_2 <- lm(log(int_rate) ~ state_mean_int + home_ownership + log(annual_inc) + dti 
+               + term + loan_amnt + total_acc + tot_cur_bal + open_acc,
+             data = train.sub)
+summary(exp(mod2_2$fitted.values))
+# plot(mod2)
+# first plot we can check unbiased/biased and homo/hetero of the residual
+# Def not having homo, reason is model miss important features.
+# second plot to check the normality of the residual. 
+# qqplot: for ith percentile data point, find ith percentile in normal distribution.
+
+summary(mod2_2)
+
+```

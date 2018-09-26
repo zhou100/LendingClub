@@ -1,8 +1,10 @@
 loan <- read.csv('LoanStats_securev1_2016Q1.csv', header = TRUE, stringsAsFactors = FALSE, skip = 1)
 loanT <- loan
 library(zoo)
-# How do we understand data? Let's use dates related features as example.
-# There are "" in the next_pymnt_d, why? Actually also for last_pymnt_d.
+
+# use dates related features to understand the data 
+# There are "" in the next_pymnt_d, also for last_pymnt_d.
+
 head(loan[, c('issue_d', 'last_pymnt_d', 'next_pymnt_d')])
 dim(subset(loan, next_pymnt_d == ""))
 with(subset(loan, next_pymnt_d == ""), table(loan_status)) # either charged off or fully paid
@@ -19,12 +21,11 @@ table(subset(loan, next_pymnt_d != "" & last_pymnt_d != "")$loan_status)
 loan <- subset(loan, loan_status != "")
 
 # Based on the observation.
-# One possible interesting question to explore is at which phase, payment is likely to be missed.
-# what other options do we have here?
-# 1) Upon loan initial application, predict whether it will be charge off or default.
-# 2) Throughout loan payment period, predict whether next payment will be missing,
+# Research question 1 : explore at which phase, payment is likely to be missed.
+# Research question 2 :  Upon loan initial application, predict whether it will be charge off or default.
+# Research question 3 : Throughout loan payment period, predict whether next payment will be missing,
 #                                    or in next quarter, whether loan status will be changed.
-# what else?
+# 
 
 loan$issue_d_1 <- as.Date(as.yearmon(loan$issue_d, "%b-%Y"))
 loan$issue_year <- as.character(format(loan$issue_d_1, "%Y"))
@@ -76,7 +77,7 @@ mod1 <- glm(loan_status_binary ~ last_pymnt_from_issue_cat,
             subset(loan, !last_pymnt_from_issue_cat %in% c('no pymnt', '(-1,0]')), family = 'binomial')
 summary(mod1)
 
-# Let's start with feature processing.
+#   feature processing.
 # Similarly, we should process all dates related columns same.
 date.cols <- colnames(loan)[c(which(grepl('_d$', colnames(loan))),
                               which(grepl('_date$', colnames(loan))))]
@@ -198,7 +199,7 @@ loan$mo_sin_old_il_acct <-  ifelse(is.na(loan$mo_sin_old_il_acct), 'no_il',
                                                     c(min(loan$mo_sin_old_il_acct, na.rm = T) - 0.01,
                                                       quantile(loan$mo_sin_old_il_acct, na.rm = T, c(0.1, 0.9)),
                                                       max(loan$mo_sin_old_il_acct, na.rm = T)))))
-# is it bcuz there is no open account? No.
+# is it because there is no open account? No.
 summary(subset(loan, is.na(num_tl_120dpd_2m))$open_acc)
 with(subset(loan, is.na(num_tl_120dpd_2m)), summary(num_tl_30dpd))
 loan$num_tl_120dpd_2m <- ifelse(is.na(loan$num_tl_120dpd_2m), 0, loan$num_tl_120dpd_2m)
@@ -239,7 +240,6 @@ loan$emp_length <- ifelse(loan$emp_length == 'n/a', loan$emp_length,
                                  '< 3 years', ifelse(loan$emp_length %in% c('4 years', '5 years', '6 years', '7 years'), 
                                                      '4-7 years', '> 8 years')))
 
-# I am not giving out much code about modeling since I hope our students could spend more time with more freedom on it.
 set.seed(1)
 train.ind <- sample(1:dim(loan)[1], 0.7* dim(loan)[1])
 train <- loan[train.ind, ]

@@ -1,10 +1,8 @@
 # LendingClub
 
 
-### Detecting default and missing payments in Lending Club loan data
-
-https://github.com/zhou100/LendingClub
-
+### Detecting defaults and predict interest rate in Lending Club loan data
+ 
 #### Summary of analysis:
 
 * Extracted features from raw lending club loan data containing different types, such as categorial, numerical and time series data, imputed missing data using
@@ -25,5 +23,11 @@ multivariate imputation by chained equation (MICE) algorithm.
 
 Data from Kaggle Lending Club Loan Data (https://www.kaggle.com/wendykan/lending-club-loan-data)
 
-Complete loan data for all loans issued through the 2007-2015, including the current loan status (Current, Late, Fully Paid, etc.) and latest payment information. The file containing loan data through the "present" contains complete loan data for all loans issued through the previous completed calendar quarter. Additional features include credit scores, number of finance inquiries, address including zip codes, and state, and collections among others. The file is a matrix of about 890 thousand observations and 75 variables. A data dictionary is provided in a separate file. k
+Complete loan data for all loans issued through the 2007-2015, including the current loan status (Current, Late, Fully Paid, etc.) and latest payment information. 
+
+The file containing loan data through the "present" contains complete loan data for all loans issued through the previous completed calendar quarter. 
+
+Additional features include credit scores, number of finance inquiries, address including zip codes, and state, and collections among others. 
+
+The file is a matrix of about 890 thousand observations and 75 variables.
 
